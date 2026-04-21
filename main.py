@@ -14,7 +14,7 @@ LOG_FILE = Path("posted_log.txt")
 NOTES_DIR = Path("data/notes")
 FEEDBACK_FILE = Path("data/feedback.txt")
 
-LINE_NOTIFY_URL = "https://notify-api.line.me/api/notify"
+LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push"
 
 
 def load_posted_log() -> set[str]:
@@ -34,9 +34,16 @@ def get_unposted_notes(posted: set[str]) -> list[Path]:
     return [p for p in NOTES_DIR.glob("*.md") if p.name not in posted]
 
 
-def send_line_notify(token: str, message: str) -> bool:
-    headers = {"Authorization": f"Bearer {token}"}
-    response = requests.post(LINE_NOTIFY_URL, headers=headers, data={"message": message})
+def send_line_message(token: str, user_id: str, message: str) -> bool:
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "to": user_id,
+        "messages": [{"type": "text", "text": message}],
+    }
+    response = requests.post(LINE_PUSH_URL, headers=headers, json=payload)
     return response.status_code == 200
 
 
@@ -54,7 +61,8 @@ def build_line_message(posts: list[str], source: str) -> str:
 
 
 def main() -> None:
-    line_token = os.environ["LINE_NOTIFY_TOKEN"]
+    line_token = os.environ["LINE_CHANNEL_ACCESS_TOKEN"]
+    line_user_id = os.environ["LINE_USER_ID"]
 
     posted = load_posted_log()
     unposted = get_unposted_notes(posted)
@@ -67,7 +75,7 @@ def main() -> None:
         posts = generate_posts_from_notes(note_text, feedback_text)
         if posts:
             message = build_line_message(posts, f"Note: {note_file.stem}")
-            if send_line_notify(line_token, message):
+            if send_line_message(line_token, line_user_id, message):
                 append_to_log(f"{note_file.name}\t{date.today()}\tline_notified")
                 print(f"[LINE通知完了] Note: {note_file.name}")
                 return
@@ -76,7 +84,7 @@ def main() -> None:
     posts = generate_posts_from_rss()
     if posts:
         message = build_line_message(posts, "AIニュース")
-        if send_line_notify(line_token, message):
+        if send_line_message(line_token, line_user_id, message):
             append_to_log(f"rss\t{date.today()}\tline_notified")
             print("[LINE通知完了] RSSニュース")
             return
