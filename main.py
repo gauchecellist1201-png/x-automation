@@ -1,12 +1,11 @@
 """
-X (Twitter) 自動投稿スクリプト
-X API v2 Free プラン（書き込み専用）対応
+毎日21:00 JST にAI投稿案を生成してLINEに通知するスクリプト
 """
 
 import os
 import sys
 import random
-import tweepy
+import requests
 from pathlib import Path
 from datetime import date
 from content_gen import generate_posts_from_notes, generate_posts_from_rss
@@ -14,6 +13,8 @@ from content_gen import generate_posts_from_notes, generate_posts_from_rss
 LOG_FILE = Path("posted_log.txt")
 NOTES_DIR = Path("data/notes")
 FEEDBACK_FILE = Path("data/feedback.txt")
+
+LINE_NOTIFY_URL = "https://notify-api.line.me/api/notify"
 
 
 def load_posted_log() -> set[str]:
@@ -33,55 +34,51 @@ def get_unposted_notes(posted: set[str]) -> list[Path]:
     return [p for p in NOTES_DIR.glob("*.md") if p.name not in posted]
 
 
-def post_tweet(client: tweepy.Client, text: str) -> str | None:
-    response = client.create_tweet(text=text)
-    return str(response.data["id"])
+def send_line_notify(token: str, message: str) -> bool:
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.post(LINE_NOTIFY_URL, headers=headers, data={"message": message})
+    return response.status_code == 200
+
+
+def build_line_message(posts: list[str], source: str) -> str:
+    today = date.today().strftime("%Y/%m/%d")
+    lines = [
+        f"\n🤖 今日({today})のX投稿案 [{source}]",
+        "─" * 20,
+    ]
+    for i, post in enumerate(posts[:3], 1):
+        lines.append(f"\n【案{i}】\n{post}")
+        lines.append("─" * 20)
+    lines.append("\n✅ 気に入った案をコピーしてXに投稿してください！")
+    return "\n".join(lines)
 
 
 def main() -> None:
-    api_key = os.environ["X_API_KEY"]
-    api_secret = os.environ["X_API_SECRET"]
-    access_token = os.environ["X_ACCESS_TOKEN"]
-    access_secret = os.environ["X_ACCESS_SECRET"]
-
-    client = tweepy.Client(
-        consumer_key=api_key,
-        consumer_secret=api_secret,
-        access_token=access_token,
-        access_token_secret=access_secret,
-    )
+    line_token = os.environ["LINE_NOTIFY_TOKEN"]
 
     posted = load_posted_log()
     unposted = get_unposted_notes(posted)
 
-    candidates: list[str] = []
-
-    # Note記事からの投稿案（未投稿ファイルが存在する場合）
+    # Note記事から生成
     if unposted:
         note_file = random.choice(unposted)
         note_text = note_file.read_text(encoding="utf-8")
         feedback_text = FEEDBACK_FILE.read_text(encoding="utf-8") if FEEDBACK_FILE.exists() else ""
-        note_posts = generate_posts_from_notes(note_text, feedback_text)
-        candidates.extend(note_posts)
-
-        if note_posts:
-            # 投稿済みとしてログに記録（ファイル名のみ）
-            posted_key = f"{note_file.name}"
-            chosen = note_posts[0]
-            tweet_id = post_tweet(client, chosen)
-            if tweet_id:
-                append_to_log(f"{posted_key}\t{date.today()}\t{tweet_id}")
-                print(f"[Note投稿] {chosen}")
+        posts = generate_posts_from_notes(note_text, feedback_text)
+        if posts:
+            message = build_line_message(posts, f"Note: {note_file.stem}")
+            if send_line_notify(line_token, message):
+                append_to_log(f"{note_file.name}\t{date.today()}\tline_notified")
+                print(f"[LINE通知完了] Note: {note_file.name}")
                 return
 
-    # RSSフィードからのAIニュース投稿
-    rss_posts = generate_posts_from_rss()
-    if rss_posts:
-        chosen = rss_posts[0]
-        tweet_id = post_tweet(client, chosen)
-        if tweet_id:
-            append_to_log(f"rss\t{date.today()}\t{tweet_id}")
-            print(f"[RSS投稿] {chosen}")
+    # RSSニュースから生成
+    posts = generate_posts_from_rss()
+    if posts:
+        message = build_line_message(posts, "AIニュース")
+        if send_line_notify(line_token, message):
+            append_to_log(f"rss\t{date.today()}\tline_notified")
+            print("[LINE通知完了] RSSニュース")
             return
 
     print("投稿候補がありませんでした。")
