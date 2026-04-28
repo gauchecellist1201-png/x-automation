@@ -47,15 +47,30 @@ def send_line_message(token: str, user_id: str, message: str) -> bool:
     return response.status_code == 200
 
 
-def build_line_message(posts: list[str], source: str) -> str:
+def build_line_message(posts: list[str], source: str, thread: dict | None = None) -> str:
     today = date.today().strftime("%Y/%m/%d")
     lines = [
         f"\n🤖 今日({today})のX投稿案 [{source}]",
         "─" * 20,
     ]
+
     for i, post in enumerate(posts[:3], 1):
         lines.append(f"\n【案{i}】\n{post}")
         lines.append("─" * 20)
+
+    if thread and thread.get("hook"):
+        lines.append("\n🧵【スレッド投稿案】")
+        lines.append(f"1/ {thread['hook']}")
+        for j, t in enumerate(thread.get("thread", [])[:3], 2):
+            lines.append(f"{j}/ {t}")
+        if thread.get("cta"):
+            lines.append(f"🔚 {thread['cta']}")
+        if thread.get("image_prompt"):
+            lines.append(f"\n🖼 画像プロンプト:\n{thread['image_prompt']}")
+        if thread.get("viral_reason"):
+            lines.append(f"⚡️ バズ予測: {thread['viral_reason']}")
+        lines.append("─" * 20)
+
     lines.append("\n✅ 気に入った案をコピーしてXに投稿してください！")
     return "\n".join(lines)
 
@@ -65,14 +80,19 @@ def main() -> None:
     line_user_id = os.environ["LINE_USER_ID"]
 
     posted = load_posted_log()
-    unposted = get_unposted_notes(posted)
 
-    # Note記事から生成
+    # Note記事から生成（未投稿のものを優先）
+    unposted = get_unposted_notes(posted)
     if unposted:
         note_file = random.choice(unposted)
         note_text = note_file.read_text(encoding="utf-8")
         feedback_text = FEEDBACK_FILE.read_text(encoding="utf-8") if FEEDBACK_FILE.exists() else ""
-        posts = generate_posts_from_notes(note_text, feedback_text)
+        note_url = ""
+        for line in note_text.splitlines():
+            if line.startswith("NOTE_URL:"):
+                note_url = line.replace("NOTE_URL:", "").strip()
+                break
+        posts = generate_posts_from_notes(note_text, feedback_text, note_url)
         if posts:
             message = build_line_message(posts, f"Note: {note_file.stem}")
             if send_line_message(line_token, line_user_id, message):
@@ -80,10 +100,10 @@ def main() -> None:
                 print(f"[LINE通知完了] Note: {note_file.name}")
                 return
 
-    # RSSニュースから生成
-    posts = generate_posts_from_rss()
+    # RSSニュースから生成（スレッド案つき）
+    posts, thread = generate_posts_from_rss()
     if posts:
-        message = build_line_message(posts, "AIニュース")
+        message = build_line_message(posts, "AIニュース", thread)
         if send_line_message(line_token, line_user_id, message):
             append_to_log(f"rss\t{date.today()}\tline_notified")
             print("[LINE通知完了] RSSニュース")
