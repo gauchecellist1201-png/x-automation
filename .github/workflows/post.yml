@@ -1,10 +1,7 @@
 name: X Auto Post
 
 on:
-  schedule:
-    # 毎日 JST 21:00 (UTC 12:00) に実行（エンゲージメント最高時間帯）
-    - cron: "0 12 * * *"
-  workflow_dispatch: # 手動実行も可能
+  workflow_dispatch: # 手動実行のみ（自動配信は一時停止中）
 
 jobs:
   post:
