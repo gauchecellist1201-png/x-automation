@@ -4,13 +4,18 @@ on:
   schedule:
     # 毎日 JST 21:00 (UTC 12:00) に実行（エンゲージメント最高時間帯）
     - cron: "0 12 * * *"
-  workflow_dispatch: # 手動実行も可能
+  workflow_dispatch:
+    inputs:
+      force_rss:
+        description: "RSSから強制生成（true/false）"
+        required: false
+        default: "false"
 
 jobs:
   post:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # posted_log.txt をコミットするために必要
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -29,6 +34,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          FORCE_RSS: ${{ github.event.inputs.force_rss }}
         run: python main.py
 
       - name: Commit posted_log.txt
