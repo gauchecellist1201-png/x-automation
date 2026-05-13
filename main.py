@@ -20,7 +20,11 @@ LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push"
 def load_posted_log() -> set[str]:
     if not LOG_FILE.exists():
         return set()
-    return set(LOG_FILE.read_text(encoding="utf-8").splitlines())
+    posted = set()
+    for line in LOG_FILE.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            posted.add(line.split("\t")[0])
+    return posted
 
 
 def append_to_log(entry: str) -> None:
@@ -47,7 +51,7 @@ def send_line_message(token: str, user_id: str, message: str) -> bool:
     return response.status_code == 200
 
 
-def build_line_message(posts: list[str], source: str) -> str:
+def build_line_message(posts: list[str], source: str, source_url: str = "") -> str:
     today = date.today().strftime("%Y/%m/%d")
     lines = [
         f"\n🤖 今日({today})のX投稿案 [{source}]",
@@ -56,6 +60,8 @@ def build_line_message(posts: list[str], source: str) -> str:
     for i, post in enumerate(posts[:3], 1):
         lines.append(f"\n【案{i}】\n{post}")
         lines.append("─" * 20)
+    if source_url:
+        lines.append(f"\n📰 元記事: {source_url}")
     lines.append("\n✅ 気に入った案をコピーしてXに投稿してください！")
     return "\n".join(lines)
 
@@ -81,9 +87,9 @@ def main() -> None:
                 return
 
     # RSSニュースから生成
-    posts = generate_posts_from_rss()
+    posts, source_url = generate_posts_from_rss()
     if posts:
-        message = build_line_message(posts, "AIニュース")
+        message = build_line_message(posts, "AIニュース", source_url)
         if send_line_message(line_token, line_user_id, message):
             append_to_log(f"rss\t{date.today()}\tline_notified")
             print("[LINE通知完了] RSSニュース")
