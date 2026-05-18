@@ -26,3 +26,4 @@ sample.md	2026-05-14	line_notified
 sample.md	2026-05-15	line_notified
 sample.md	2026-05-16	line_notified
 sample.md	2026-05-17	line_notified
+sample.md	2026-05-18	line_notified
