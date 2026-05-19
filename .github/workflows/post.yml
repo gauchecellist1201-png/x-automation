@@ -2,15 +2,22 @@ name: X Auto Post
 
 on:
   schedule:
-    # 毎日 JST 21:00 (UTC 12:00) に実行（エンゲージメント最高時間帯）
+    # 毎日 JST 12:00 (UTC 03:00) — 昼休みのエンゲージメント最高時間帯
+    - cron: "0 3 * * *"
+    # 毎日 JST 21:00 (UTC 12:00) — 夜のエンゲージメントピーク
     - cron: "0 12 * * *"
-  workflow_dispatch: # 手動実行も可能
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "生成モード (rss / thread / original)"
+        required: false
+        default: "rss"
 
 jobs:
   post:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # posted_log.txt をコミットするために必要
+      contents: write
 
     steps:
       - name: Checkout repository
