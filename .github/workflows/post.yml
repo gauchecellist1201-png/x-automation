@@ -1,8 +1,8 @@
-name: X Auto Post
+name: Daily AI Post to X
 
 on:
   schedule:
-    # 毎日 JST 21:00 (UTC 12:00) に実行（エンゲージメント最高時間帯）
+    # 毎日 JST 21:00 (UTC 12:00) - Xエンゲージメント最高時間帯
     - cron: "0 12 * * *"
   workflow_dispatch: # 手動実行も可能
 
@@ -24,9 +24,15 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run auto post
+      - name: Run daily post
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # X(Twitter) API 認証情報
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+          # LINE通知（X投稿失敗時のフォールバック）
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
         run: python main.py
