@@ -1,5 +1,6 @@
 """
 毎日21:00 JST にAI投稿案を生成してLINEに通知するスクリプト
+バズ分析 + スレッド投稿 + ニュースURL付き通知版
 """
 
 import os
@@ -8,7 +9,7 @@ import random
 import requests
 from pathlib import Path
 from datetime import date
-from content_gen import generate_posts_from_notes, generate_posts_from_rss
+from content_gen import generate_posts_from_notes, generate_posts_from_rss, generate_thread_post
 
 LOG_FILE = Path("posted_log.txt")
 NOTES_DIR = Path("data/notes")
@@ -47,16 +48,40 @@ def send_line_message(token: str, user_id: str, message: str) -> bool:
     return response.status_code == 200
 
 
-def build_line_message(posts: list[str], source: str) -> str:
+def build_line_message(
+    posts: list[str],
+    source: str,
+    thread: list[str] | None = None,
+    source_url: str = "",
+) -> str:
     today = date.today().strftime("%Y/%m/%d")
     lines = [
-        f"\n🤖 今日({today})のX投稿案 [{source}]",
-        "─" * 20,
+        f"🤖 今日({today})のX投稿案 [{source}]",
+        "━" * 22,
+        "",
+        "【通常ツイート案】",
     ]
+
     for i, post in enumerate(posts[:3], 1):
-        lines.append(f"\n【案{i}】\n{post}")
-        lines.append("─" * 20)
-    lines.append("\n✅ 気に入った案をコピーしてXに投稿してください！")
+        lines.append(f"▼ 案{i}")
+        lines.append(post)
+        lines.append("")
+
+    if source_url:
+        lines.append(f"📰 参考ニュース（OGP画像付きで貼ると◎）")
+        lines.append(source_url)
+        lines.append("")
+
+    if thread:
+        lines.append("━" * 22)
+        lines.append("【スレッド投稿案 ※エンゲージ3〜5倍】")
+        for i, part in enumerate(thread, 1):
+            lines.append(f"[{i}/{len(thread)}] {part}")
+            lines.append("")
+
+    lines.append("━" * 22)
+    lines.append("✅ 気に入った案をコピーしてXに投稿！")
+    lines.append("💡 画像はニュースURLのOGPか、図解スクショが効果的")
     return "\n".join(lines)
 
 
@@ -67,23 +92,44 @@ def main() -> None:
     posted = load_posted_log()
     unposted = get_unposted_notes(posted)
 
+    source_url = ""
+    thread: list[str] = []
+
     # Note記事から生成
     if unposted:
         note_file = random.choice(unposted)
         note_text = note_file.read_text(encoding="utf-8")
         feedback_text = FEEDBACK_FILE.read_text(encoding="utf-8") if FEEDBACK_FILE.exists() else ""
-        posts = generate_posts_from_notes(note_text, feedback_text)
+
+        # Note内URLがあれば抽出
+        import re
+        url_match = re.search(r"NOTE_URL:\s*(\S+)", note_text)
+        note_url = url_match.group(1) if url_match else ""
+
+        posts = generate_posts_from_notes(note_text, feedback_text, note_url)
         if posts:
-            message = build_line_message(posts, f"Note: {note_file.stem}")
+            thread = generate_thread_post(note_text[:200])
+            message = build_line_message(
+                posts,
+                f"Note: {note_file.stem}",
+                thread=thread,
+                source_url=note_url,
+            )
             if send_line_message(line_token, line_user_id, message):
                 append_to_log(f"{note_file.name}\t{date.today()}\tline_notified")
                 print(f"[LINE通知完了] Note: {note_file.name}")
                 return
 
     # RSSニュースから生成
-    posts = generate_posts_from_rss()
+    posts, source_url = generate_posts_from_rss()
     if posts:
-        message = build_line_message(posts, "AIニュース")
+        thread = generate_thread_post(posts[0][:80] if posts else "")
+        message = build_line_message(
+            posts,
+            "AIニュース",
+            thread=thread,
+            source_url=source_url,
+        )
         if send_line_message(line_token, line_user_id, message):
             append_to_log(f"rss\t{date.today()}\tline_notified")
             print("[LINE通知完了] RSSニュース")
