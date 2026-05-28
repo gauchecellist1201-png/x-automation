@@ -35,3 +35,4 @@ naoki_profile.md	2026-05-23	line_notified
 sample.md	2026-05-24	line_notified
 sample.md	2026-05-25	line_notified
 sample.md	2026-05-27	line_notified
+naoki_profile.md	2026-05-28	line_notified
