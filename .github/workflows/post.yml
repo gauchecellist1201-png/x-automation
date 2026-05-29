@@ -4,13 +4,22 @@ on:
   schedule:
     # 毎日 JST 21:00 (UTC 12:00) に実行（エンゲージメント最高時間帯）
     - cron: "0 12 * * *"
-  workflow_dispatch: # 手動実行も可能
+  workflow_dispatch:
+    inputs:
+      auto_post:
+        description: "X に自動投稿する (true / false)"
+        required: false
+        default: "true"
+      generate_image:
+        description: "ビジュアルカードを生成・添付する (true / false)"
+        required: false
+        default: "true"
 
 jobs:
   post:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # posted_log.txt をコミットするために必要
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -21,6 +30,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install Japanese fonts (for image card generation)
+        run: sudo apt-get install -y fonts-noto-cjk
+
       - name: Install dependencies
         run: pip install -r requirements.txt
 
@@ -29,12 +41,18 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+          AUTO_POST: ${{ github.event.inputs.auto_post || 'true' }}
+          GENERATE_IMAGE: ${{ github.event.inputs.generate_image || 'true' }}
         run: python main.py
 
-      - name: Commit posted_log.txt
+      - name: Commit posted_log.txt and generated images
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add posted_log.txt
+          git add posted_log.txt data/posted_images/ 2>/dev/null || true
           git diff --cached --quiet || git commit -m "chore: update posted_log [skip ci]"
           git push
