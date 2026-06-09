@@ -1,5 +1,5 @@
 """
-毎日21:00 JST にAI投稿案を生成してLINEに通知するスクリプト
+毎日21:00 JST にビジネス向けバイラルAI投稿案を生成してLINEに通知するスクリプト
 """
 
 import os
@@ -47,16 +47,50 @@ def send_line_message(token: str, user_id: str, message: str) -> bool:
     return response.status_code == 200
 
 
-def build_line_message(posts: list[str], source: str) -> str:
+def _char_count(text: str) -> int:
+    """ツイート文字数をカウント（URLは23文字換算）"""
+    import re
+    url_pattern = re.compile(r"https?://\S+")
+    urls = url_pattern.findall(text)
+    count = len(text)
+    for url in urls:
+        count = count - len(url) + 23
+    return count
+
+
+def build_line_message(posts: list[dict], source: str) -> str:
     today = date.today().strftime("%Y/%m/%d")
+    sep = "━" * 22
+
     lines = [
-        f"\n🤖 今日({today})のX投稿案 [{source}]",
-        "─" * 20,
+        f"🤖 今日({today})のX投稿案",
+        f"📌 ソース: {source}",
+        sep,
     ]
+
+    # ニュース元タイトルを1回だけ表示
+    if posts and posts[0].get("source_title"):
+        source_title = posts[0]["source_title"]
+        if source_title not in ("Note記事", "AIビジネス洞察"):
+            lines.append(f"📰 元ネタ: {source_title[:60]}{'…' if len(source_title) > 60 else ''}")
+            lines.append(sep)
+
     for i, post in enumerate(posts[:3], 1):
-        lines.append(f"\n【案{i}】\n{post}")
-        lines.append("─" * 20)
-    lines.append("\n✅ 気に入った案をコピーしてXに投稿してください！")
+        tweet = post["tweet"]
+        pattern_name = post.get("pattern_name", "")
+        image_hint = post.get("image_hint", "")
+        source_url = post.get("source_url", "")
+        char_count = _char_count(tweet)
+
+        lines.append(f"\n【案{i}】{pattern_name} ({char_count}文字)")
+        lines.append(tweet)
+        if source_url:
+            lines.append(f"🔗 {source_url}")
+        lines.append(f"📸 推奨画像: {image_hint}")
+        lines.append(sep)
+
+    lines.append("\n✅ 気に入った案をXに投稿してください！")
+    lines.append("📊 エンゲージメント後は feedback.txt に追記でAIが学習します")
     return "\n".join(lines)
 
 
@@ -83,7 +117,8 @@ def main() -> None:
     # RSSニュースから生成
     posts = generate_posts_from_rss()
     if posts:
-        message = build_line_message(posts, "AIニュース")
+        source_title = posts[0].get("source_title", "AIニュース")
+        message = build_line_message(posts, source_title[:40])
         if send_line_message(line_token, line_user_id, message):
             append_to_log(f"rss\t{date.today()}\tline_notified")
             print("[LINE通知完了] RSSニュース")

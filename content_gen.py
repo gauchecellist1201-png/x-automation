@@ -1,39 +1,38 @@
 """
 Claude API を使った戦略的投稿文生成モジュール
-対象アカウント: @GAUCHE_cellist（井出直毅）
+ターゲット: ビジネス層向けAI情報発信・フォロワー獲得
 """
 
 import os
 import re
-import feedparser
+import random
 import anthropic
-
-RSS_FEEDS = [
-    "https://news.google.com/rss/search?q=AI+人工知能+Claude+OpenAI&hl=ja&gl=JP&ceid=JP:ja",
-    "https://news.google.com/rss/search?q=生成AI+LLM+大規模言語モデル&hl=ja&gl=JP&ceid=JP:ja",
-    "https://feeds.feedburner.com/ledge-ai",
-]
+from viral_analyzer import (
+    fetch_trending_ai_news,
+    format_patterns_for_prompt,
+    VIRAL_TWEET_PATTERNS,
+)
 
 MAX_TWEET_LENGTH = 140
 NUM_CANDIDATES = 3
 
 AUTHOR_PROFILE = """
-## 著者プロフィール：井出直毅 (@GAUCHE_cellist)
-- 医学生 × AI/ブロックチェーン起業家
-- 医療×テクノロジーの融合を追求
-- 課題解決志向、グローバル視点
-- 専門的知識を持ちながら、読者に考えさせる問いを投げかけるスタイル
-- 押しつけがましくなく、静かに鋭い洞察を届ける
+## アカウントコンセプト
+- ビジネス層向けAI最新情報・活用事例を発信するアカウント
+- ターゲット読者: 経営者・管理職・ビジネスパーソン・AI導入担当者
+- ゴール: フォロワー獲得・エンゲージメント最大化
+- スタイル: 専門的かつ実践的、難解すぎない、今日から使える視点
+- 発信テーマ: 最新AI情報、ビジネス活用事例、未来予測、実践ノウハウ
 """
 
-TWEET_STRATEGY = """
-## バズるAI投稿の戦略
-1. 「知らなかった」「考えさせられた」と思わせる切り口
-2. 専門的だが難解すぎない言葉選び
-3. 医療・社会変革・未来への問いかけを絡める
-4. 結論より「問い」で終わるとRTされやすい
-5. ハッシュタグは #AI #生成AI のうち1〜2個まで
-6. Noteリンクをつける場合は文末に自然に入れる
+TWEET_RULES = """
+## ツイート生成ルール
+- 140文字以内（URLは23文字換算）
+- ハッシュタグは #AI #生成AI #ビジネスAI のうち1〜2個まで
+- 具体的な数字・事例を入れると拡散力が2〜3倍になる
+- 絵文字は1〜2個まで（使う場合は冒頭か末尾）
+- スレッドフック（🧵）はパターン「スレッドフック」専用
+- URLは「案3」にのみ入れる（指示がある場合）
 """
 
 
@@ -47,102 +46,171 @@ def _call_claude(prompt: str) -> str:
     return message.content[0].text
 
 
-def _extract_best_tweet(raw: str) -> list[str]:
-    """番号付きリストから投稿文を抽出し140文字以内に絞る"""
-    lines = [
-        re.sub(r"^\d+[\.\)]\s*", "", l).strip()
-        for l in raw.splitlines()
-        if re.match(r"^\d+", l.strip())
-    ]
-    return [t for t in lines if 0 < len(t) <= MAX_TWEET_LENGTH]
-
-
-def generate_posts_from_notes(note_text: str, feedback_text: str, note_url: str = "") -> list[str]:
-    """Note記事 + 過去実績 (few-shot) から戦略的投稿案を生成"""
-    few_shot_section = ""
-    if feedback_text.strip():
-        examples = "\n".join(
-            l for l in feedback_text.splitlines() if l.strip() and not l.startswith("#")
-        )
-        if examples:
-            few_shot_section = f"\n## 過去に反応が良かった投稿（この文体・温度感を再現）\n{examples}\n"
-
-    link_instruction = f"\n- 文末にNoteリンクを入れてもよい: {note_url}" if note_url else ""
-
-    prompt = f"""あなたはXアカウント @GAUCHE_cellist（井出直毅）の投稿担当AIです。
-以下のNote記事を読み、Xに投稿する文章を{NUM_CANDIDATES}案作成してください。
-
-{AUTHOR_PROFILE}
-{TWEET_STRATEGY}
-
-ルール:
-- 各投稿は140文字以内（URLは23文字換算）
-- 番号付きリスト（1. 2. 3.）で出力
-- ハッシュタグは1〜2個まで
-- AIに関するプロレベルの洞察を、一般読者にも刺さる言葉で{link_instruction}
-{few_shot_section}
-## Note記事本文
-{note_text[:4000]}
-"""
-    raw = _call_claude(prompt)
-    return _extract_best_tweet(raw)
-
-
-def fetch_rss_headlines(max_items: int = 8) -> list[str]:
-    headlines: list[str] = []
-    for url in RSS_FEEDS:
-        try:
-            feed = feedparser.parse(url)
-            for entry in feed.entries[:max_items]:
-                title = entry.get("title", "").strip()
-                if title and len(title) > 10:
-                    headlines.append(title)
-        except Exception:
+def _extract_numbered_tweets(raw: str) -> list[str]:
+    """番号付きリストからツイート本文を抽出・整形"""
+    tweets = []
+    for line in raw.splitlines():
+        line = line.strip()
+        m = re.match(r"^(\d+)[\.\)]\s*(.+)$", line)
+        if not m:
             continue
-    return list(dict.fromkeys(headlines))[:max_items]
+        tweet = m.group(2).strip()
+        # 余分なラベル・括弧を除去
+        tweet = re.sub(r"^\[[\w_]+\]\s*", "", tweet)
+        tweet = re.sub(r"^【[\w\s]+】\s*", "", tweet)
+        if 10 < len(tweet) <= MAX_TWEET_LENGTH + 30:  # URL分の余裕
+            tweets.append(tweet[:MAX_TWEET_LENGTH + 30])
+    return tweets
 
 
-def generate_posts_from_rss() -> list[str]:
-    """最新AIトレンドニュースを元に、@GAUCHE_cellist らしい意見投稿を生成"""
-    headlines = fetch_rss_headlines()
-    if not headlines:
+def _pick_patterns(n: int = NUM_CANDIDATES) -> list[dict]:
+    """毎日バリエーションが出るようパターンをランダムに選択"""
+    return random.sample(VIRAL_TWEET_PATTERNS, min(n, len(VIRAL_TWEET_PATTERNS)))
+
+
+def generate_posts_from_rss() -> list[dict]:
+    """最新AIトレンドニュースからビジネス向けバイラルツイートを生成"""
+    topics = fetch_trending_ai_news(max_items=10)
+
+    if topics:
+        top = topics[0]
+        headlines_text = "\n".join(f"- {t.title}" for t in topics[:8])
+        source_url = top.url
+        source_title = top.title
+    else:
         return _generate_original_ai_insight()
 
-    headlines_text = "\n".join(f"- {h}" for h in headlines)
+    selected_patterns = _pick_patterns(NUM_CANDIDATES)
+    patterns_text = format_patterns_for_prompt([p["id"] for p in selected_patterns])
 
-    prompt = f"""あなたはXアカウント @GAUCHE_cellist（井出直毅）の投稿担当AIです。
+    link_note = (
+        f"\n- 案{NUM_CANDIDATES}にはこのニュースリンクを文末に入れてよい（23文字換算）: {source_url}"
+        if source_url else ""
+    )
+
+    prompt = f"""あなたはビジネス層向けAI情報発信アカウントの投稿担当AIです。
 以下の最新AIニュースから最も注目すべきトピックを1つ選び、
-井出直毅らしい洞察・意見をX投稿として{NUM_CANDIDATES}案作成してください。
+ビジネスパーソンに強く刺さるX投稿を{NUM_CANDIDATES}案作成してください。
 
 {AUTHOR_PROFILE}
-{TWEET_STRATEGY}
+{TWEET_RULES}
 
-ルール:
-- 各投稿は140文字以内
-- 番号付きリスト（1. 2. 3.）で出力
-- 医療×AI、社会変革、未来への問いを絡めると尚良い
-- ハッシュタグは1〜2個まで
+## 今日使うバイラルパターン（それぞれ1案ずつ、順番通りに）
+{patterns_text}
+{link_note}
 
-## 今日の最新AIニュース
+## 今日の最新AIニュース（最もビジネス関連度が高いものを優先）
 {headlines_text}
+
+出力形式（ツイート本文のみ、説明不要）:
+1. [ツイート本文]
+2. [ツイート本文]
+3. [ツイート本文]
 """
     raw = _call_claude(prompt)
-    return _extract_best_tweet(raw)
+    tweets = _extract_numbered_tweets(raw)
+
+    result = []
+    for i, tweet in enumerate(tweets[:NUM_CANDIDATES]):
+        pattern = selected_patterns[i] if i < len(selected_patterns) else selected_patterns[0]
+        result.append({
+            "tweet": tweet,
+            "pattern_name": pattern["name"],
+            "pattern_id": pattern["id"],
+            "image_hint": pattern["image_hint"],
+            "source_url": source_url if i == NUM_CANDIDATES - 1 else "",
+            "source_title": source_title,
+        })
+    return result
 
 
-def _generate_original_ai_insight() -> list[str]:
-    """RSSが取得できない場合のオリジナル洞察ツイート生成"""
-    prompt = f"""あなたはXアカウント @GAUCHE_cellist（井出直毅）の投稿担当AIです。
-2026年のAI業界で最も重要なトピックについて、
-井出直毅らしい深い洞察を持つX投稿を{NUM_CANDIDATES}案作成してください。
+def generate_posts_from_notes(note_text: str, feedback_text: str, note_url: str = "") -> list[dict]:
+    """Note記事 + 過去実績（few-shot）からバイラルツイートを生成"""
+    few_shot = ""
+    if feedback_text.strip():
+        examples = "\n".join(
+            l for l in feedback_text.splitlines()
+            if l.strip() and not l.startswith("#")
+        )
+        if examples:
+            few_shot = f"\n## 過去に反応が良かった投稿（文体・温度感を参考に）\n{examples}\n"
+
+    selected_patterns = _pick_patterns(NUM_CANDIDATES)
+    patterns_text = format_patterns_for_prompt([p["id"] for p in selected_patterns])
+    link_note = (
+        f"\n- 案{NUM_CANDIDATES}には以下のNoteリンクを文末に入れてよい（23文字換算）: {note_url}"
+        if note_url else ""
+    )
+
+    prompt = f"""あなたはビジネス層向けAI情報発信アカウントの投稿担当AIです。
+以下のNote記事を読み、ビジネスパーソンに刺さるX投稿を{NUM_CANDIDATES}案作成してください。
 
 {AUTHOR_PROFILE}
-{TWEET_STRATEGY}
+{TWEET_RULES}
 
-ルール:
-- 各投稿は140文字以内
-- 番号付きリスト（1. 2. 3.）で出力
-- Claude、GPT、医療AI、AIと社会変革などのテーマを優先
+## 今日使うバイラルパターン（それぞれ1案ずつ、順番通りに）
+{patterns_text}
+{link_note}
+{few_shot}
+## Note記事本文
+{note_text[:4000]}
+
+出力形式（ツイート本文のみ、説明不要）:
+1. [ツイート本文]
+2. [ツイート本文]
+3. [ツイート本文]
 """
     raw = _call_claude(prompt)
-    return _extract_best_tweet(raw)
+    tweets = _extract_numbered_tweets(raw)
+
+    result = []
+    for i, tweet in enumerate(tweets[:NUM_CANDIDATES]):
+        pattern = selected_patterns[i] if i < len(selected_patterns) else selected_patterns[0]
+        result.append({
+            "tweet": tweet,
+            "pattern_name": pattern["name"],
+            "pattern_id": pattern["id"],
+            "image_hint": pattern["image_hint"],
+            "source_url": note_url if i == NUM_CANDIDATES - 1 else "",
+            "source_title": "Note記事",
+        })
+    return result
+
+
+def _generate_original_ai_insight() -> list[dict]:
+    """RSSが取得できない場合のオリジナル洞察ツイート生成（フォールバック）"""
+    selected_patterns = _pick_patterns(NUM_CANDIDATES)
+    patterns_text = format_patterns_for_prompt([p["id"] for p in selected_patterns])
+
+    prompt = f"""あなたはビジネス層向けAI情報発信アカウントの投稿担当AIです。
+2026年のAI業界で最も重要なビジネストピックについて、
+経営者・ビジネスパーソンに強く刺さるX投稿を{NUM_CANDIDATES}案作成してください。
+
+{AUTHOR_PROFILE}
+{TWEET_RULES}
+
+## 今日使うバイラルパターン（それぞれ1案ずつ）
+{patterns_text}
+
+優先テーマ: AI自動化・業務効率化・AIエージェント・企業のAI戦略・AIと雇用・ROI
+
+出力形式（ツイート本文のみ、説明不要）:
+1. [ツイート本文]
+2. [ツイート本文]
+3. [ツイート本文]
+"""
+    raw = _call_claude(prompt)
+    tweets = _extract_numbered_tweets(raw)
+
+    result = []
+    for i, tweet in enumerate(tweets[:NUM_CANDIDATES]):
+        pattern = selected_patterns[i] if i < len(selected_patterns) else selected_patterns[0]
+        result.append({
+            "tweet": tweet,
+            "pattern_name": pattern["name"],
+            "pattern_id": pattern["id"],
+            "image_hint": pattern["image_hint"],
+            "source_url": "",
+            "source_title": "AIビジネス洞察",
+        })
+    return result
