@@ -10,7 +10,7 @@ jobs:
   post:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # posted_log.txt をコミットするために必要
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -27,6 +27,14 @@ jobs:
       - name: Run auto post
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # X API（設定済みの場合: 自動投稿 / 未設定の場合: LINE通知のみ）
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+          # X Bearer Token（バズツイート分析用 / 省略可）
+          X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
+          # LINE（投稿完了通知または下書き送信 / 省略可）
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
         run: python main.py
