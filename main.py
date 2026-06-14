@@ -3,6 +3,7 @@
 """
 
 import os
+import re
 import sys
 import random
 import requests
@@ -31,7 +32,11 @@ def append_to_log(entry: str) -> None:
 def get_unposted_notes(posted: set[str]) -> list[Path]:
     if not NOTES_DIR.exists():
         return []
-    return [p for p in NOTES_DIR.glob("*.md") if p.name not in posted]
+    # 投稿済みファイル名のみ抽出（ログ行は "name\tdate\tstatus" 形式）
+    posted_names = {line.split("\t")[0] for line in posted if line.strip()}
+    notes = [p for p in NOTES_DIR.glob("*.md") if p.name not in posted_names]
+    # 日付付きファイル名（YYYY-MM-DD_*.md）を優先、それ以外は後回し
+    return sorted(notes, key=lambda p: (0 if re.match(r"^\d{4}-\d{2}-\d{2}", p.name) else 1, p.name))
 
 
 def send_line_message(token: str, user_id: str, message: str) -> bool:
@@ -67,9 +72,9 @@ def main() -> None:
     posted = load_posted_log()
     unposted = get_unposted_notes(posted)
 
-    # Note記事から生成
+    # Note記事から生成（日付付きファイルを優先、それ以外はランダム）
     if unposted:
-        note_file = random.choice(unposted)
+        note_file = unposted[0] if re.match(r"^\d{4}-\d{2}-\d{2}", unposted[0].name) else random.choice(unposted)
         note_text = note_file.read_text(encoding="utf-8")
         feedback_text = FEEDBACK_FILE.read_text(encoding="utf-8") if FEEDBACK_FILE.exists() else ""
         posts = generate_posts_from_notes(note_text, feedback_text)
