@@ -54,9 +54,11 @@ def build_line_message(posts: list[str], source: str) -> str:
         "─" * 20,
     ]
     for i, post in enumerate(posts[:3], 1):
-        lines.append(f"\n【案{i}】\n{post}")
+        char_count = len(post)
+        lines.append(f"\n【案{i}】({char_count}文字)\n{post}")
         lines.append("─" * 20)
     lines.append("\n✅ 気に入った案をコピーしてXに投稿してください！")
+    lines.append("📊 バズ狙い: 改行・数字・リスト形式が拡散を加速します")
     return "\n".join(lines)
 
 
