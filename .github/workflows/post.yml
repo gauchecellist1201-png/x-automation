@@ -2,7 +2,7 @@ name: X Auto Post
 
 on:
   schedule:
-    # 毎日 JST 21:00 (UTC 12:00) に実行（エンゲージメント最高時間帯）
+    # 毎日 JST 21:00 (UTC 12:00) ── エンゲージメント最高時間帯
     - cron: "0 12 * * *"
   workflow_dispatch: # 手動実行も可能
 
@@ -27,6 +27,14 @@ jobs:
       - name: Run auto post
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # X/Twitter API 認証（自動投稿に必要）
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+          X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
+          X_USERNAME: ${{ secrets.X_USERNAME }}
+          # LINE 通知（オプション）
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
         run: python main.py
