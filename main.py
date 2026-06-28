@@ -8,7 +8,11 @@ import random
 import requests
 from pathlib import Path
 from datetime import date
-from content_gen import generate_posts_from_notes, generate_posts_from_rss
+from content_gen import (
+    generate_posts_from_notes,
+    generate_posts_from_rss,
+    fetch_rss_headlines,
+)
 
 LOG_FILE = Path("posted_log.txt")
 NOTES_DIR = Path("data/notes")
@@ -47,16 +51,26 @@ def send_line_message(token: str, user_id: str, message: str) -> bool:
     return response.status_code == 200
 
 
-def build_line_message(posts: list[str], source: str) -> str:
+def build_line_message(posts: list[str], source: str, top_links: list[str] | None = None) -> str:
     today = date.today().strftime("%Y/%m/%d")
     lines = [
         f"\n🤖 今日({today})のX投稿案 [{source}]",
-        "─" * 20,
+        "─" * 22,
     ]
     for i, post in enumerate(posts[:3], 1):
         lines.append(f"\n【案{i}】\n{post}")
-        lines.append("─" * 20)
+        lines.append(f"文字数: {len(post)}字")
+        lines.append("─" * 22)
+
+    lines.append("\n📌 参考ニュースソース（引用・リンク添付用）")
+    if top_links:
+        for j, link in enumerate(top_links[:3], 1):
+            lines.append(f"{j}. {link}")
+    else:
+        lines.append("（RSSソースなし）")
+
     lines.append("\n✅ 気に入った案をコピーしてXに投稿してください！")
+    lines.append("💡 画像を添付するとエンゲージメント2〜3倍になります")
     return "\n".join(lines)
 
 
@@ -81,9 +95,11 @@ def main() -> None:
                 return
 
     # RSSニュースから生成
+    rss_items = fetch_rss_headlines(max_items=5)
     posts = generate_posts_from_rss()
     if posts:
-        message = build_line_message(posts, "AIニュース")
+        top_links = [item["link"] for item in rss_items if item.get("link")][:3]
+        message = build_line_message(posts, "AIニュース", top_links)
         if send_line_message(line_token, line_user_id, message):
             append_to_log(f"rss\t{date.today()}\tline_notified")
             print("[LINE通知完了] RSSニュース")
