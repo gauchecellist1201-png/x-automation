@@ -47,7 +47,7 @@ def send_line_message(token: str, user_id: str, message: str) -> bool:
     return response.status_code == 200
 
 
-def build_line_message(posts: list[str], source: str) -> str:
+def build_line_message(posts: list[str], source: str, source_link: str = "") -> str:
     today = date.today().strftime("%Y/%m/%d")
     lines = [
         f"\n🤖 今日({today})のX投稿案 [{source}]",
@@ -56,7 +56,11 @@ def build_line_message(posts: list[str], source: str) -> str:
     for i, post in enumerate(posts[:3], 1):
         lines.append(f"\n【案{i}】\n{post}")
         lines.append("─" * 20)
-    lines.append("\n✅ 気に入った案をコピーしてXに投稿してください！")
+    if source_link:
+        lines.append(f"\n📎 ソース記事:\n{source_link}")
+        lines.append("─" * 20)
+    lines.append("\n✅ 気に入った案をコピーしてXに投稿！")
+    lines.append("💡 ソース記事の画像をスクショして添付するとエンゲージメントがさらにUPします")
     return "\n".join(lines)
 
 
@@ -67,7 +71,7 @@ def main() -> None:
     posted = load_posted_log()
     unposted = get_unposted_notes(posted)
 
-    # Note記事から生成
+    # Note記事から生成（未投稿ファイルがある場合）
     if unposted:
         note_file = random.choice(unposted)
         note_text = note_file.read_text(encoding="utf-8")
@@ -81,9 +85,12 @@ def main() -> None:
                 return
 
     # RSSニュースから生成
-    posts = generate_posts_from_rss()
+    posts, source_link, source_title = generate_posts_from_rss()
     if posts:
-        message = build_line_message(posts, "AIニュース")
+        label = f"AIニュース"
+        if source_title:
+            label = f"AIニュース: {source_title[:25]}..."
+        message = build_line_message(posts, label, source_link=source_link)
         if send_line_message(line_token, line_user_id, message):
             append_to_log(f"rss\t{date.today()}\tline_notified")
             print("[LINE通知完了] RSSニュース")
