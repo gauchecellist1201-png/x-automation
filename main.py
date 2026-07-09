@@ -20,7 +20,14 @@ LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push"
 def load_posted_log() -> set[str]:
     if not LOG_FILE.exists():
         return set()
-    return set(LOG_FILE.read_text(encoding="utf-8").splitlines())
+    posted: set[str] = set()
+    for line in LOG_FILE.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            filename = line.split("\t")[0].strip()
+            if filename:
+                posted.add(filename)
+    return posted
 
 
 def append_to_log(entry: str) -> None:
@@ -31,7 +38,10 @@ def append_to_log(entry: str) -> None:
 def get_unposted_notes(posted: set[str]) -> list[Path]:
     if not NOTES_DIR.exists():
         return []
-    return [p for p in NOTES_DIR.glob("*.md") if p.name not in posted]
+    all_notes = list(NOTES_DIR.glob("*.md"))
+    unposted = [p for p in all_notes if p.name not in posted]
+    # すべて投稿済みならローテーション（全件リセット）
+    return unposted if unposted else all_notes
 
 
 def send_line_message(token: str, user_id: str, message: str) -> bool:
@@ -50,13 +60,15 @@ def send_line_message(token: str, user_id: str, message: str) -> bool:
 def build_line_message(posts: list[str], source: str) -> str:
     today = date.today().strftime("%Y/%m/%d")
     lines = [
-        f"\n🤖 今日({today})のX投稿案 [{source}]",
-        "─" * 20,
+        f"🤖 今日({today})のX投稿案 [{source}]",
+        "━" * 22,
     ]
-    for i, post in enumerate(posts[:3], 1):
-        lines.append(f"\n【案{i}】\n{post}")
-        lines.append("─" * 20)
-    lines.append("\n✅ 気に入った案をコピーしてXに投稿してください！")
+    for i, post in enumerate(posts[:5], 1):
+        lines.append(f"\n【案{i}】")
+        lines.append(post)
+        lines.append("─" * 22)
+    lines.append("\n✅ 気に入った案をコピーしてXに投稿！")
+    lines.append("💡 複数投稿する場合は時間をあけて投稿推奨")
     return "\n".join(lines)
 
 
