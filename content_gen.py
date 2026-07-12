@@ -10,7 +10,8 @@ import anthropic
 
 RSS_FEEDS = [
     "https://news.google.com/rss/search?q=AI+人工知能+Claude+OpenAI&hl=ja&gl=JP&ceid=JP:ja",
-    "https://news.google.com/rss/search?q=生成AI+LLM+大規模言語モデル&hl=ja&gl=JP&ceid=JP:ja",
+    "https://news.google.com/rss/search?q=生成AI+LLM+エージェント+2026&hl=ja&gl=JP&ceid=JP:ja",
+    "https://news.google.com/rss/search?q=医療AI+ヘルスケアDX+AI規制&hl=ja&gl=JP&ceid=JP:ja",
     "https://feeds.feedburner.com/ledge-ai",
 ]
 
@@ -27,20 +28,38 @@ AUTHOR_PROFILE = """
 """
 
 TWEET_STRATEGY = """
-## バズるAI投稿の戦略
-1. 「知らなかった」「考えさせられた」と思わせる切り口
-2. 専門的だが難解すぎない言葉選び
-3. 医療・社会変革・未来への問いかけを絡める
-4. 結論より「問い」で終わるとRTされやすい
-5. ハッシュタグは #AI #生成AI のうち1〜2個まで
-6. Noteリンクをつける場合は文末に自然に入れる
+## バズるAI投稿の戦略（実証済みパターン）
+
+### フック（最初の1行）パターン ※必ずいずれかを使う
+- 【数字フック】「AIコーディング市場、2年で150%成長。」→ 具体的数字で掴む
+- 【逆説フック】「AIが賢くなるほど、専門家の価値は上がる。」→ 意外性で止める
+- 【問いフック】「あなたの会社はまだAI輸出規制リスクを管理していない？」→ 当事者意識
+- 【予言フック】「2027年、コードを書けない医師が最も価値を生む時代が来る。」
+
+### 本文の構造
+- 1文目：フック（強い主張か数字か問い）
+- 2〜3文目：根拠・具体例（ニュース事実、医療×AI視点）
+- 最終行：問い、または行動を促す一言
+
+### エンゲージメントを上げる仕掛け
+- 結論より「問い」で終わるとRTされやすい
+- 「〇〇な人はフォローして」は避ける（押しつけに見える）
+- ビジネス層が「シェアしたい」と思う洞察を入れる
+- 医療・社会変革・グローバル規制を絡めると差別化できる
+
+### ハッシュタグルール
+- 1〜2個まで（#AI #生成AI #医療DX のうち話題に合ったもの）
+- 本文の最後に自然に付ける
+
+### Noteリンク
+- つける場合は文末最後に（URLは23文字換算）
 """
 
 
 def _call_claude(prompt: str) -> str:
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     message = client.messages.create(
-        model="claude-sonnet-4-6",
+        model="claude-sonnet-5",
         max_tokens=1024,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -77,9 +96,10 @@ def generate_posts_from_notes(note_text: str, feedback_text: str, note_url: str 
 
 ルール:
 - 各投稿は140文字以内（URLは23文字換算）
-- 番号付きリスト（1. 2. 3.）で出力
+- 番号付きリスト（1. 2. 3.）で出力し、投稿文以外の説明は不要
 - ハッシュタグは1〜2個まで
-- AIに関するプロレベルの洞察を、一般読者にも刺さる言葉で{link_instruction}
+- 必ず上記フックパターンのいずれかで始める
+- ビジネス層（経営者・スタートアップ・医療従事者）が「いいね・RT」したくなる視点で{link_instruction}
 {few_shot_section}
 ## Note記事本文
 {note_text[:4000]}
@@ -119,8 +139,9 @@ def generate_posts_from_rss() -> list[str]:
 
 ルール:
 - 各投稿は140文字以内
-- 番号付きリスト（1. 2. 3.）で出力
-- 医療×AI、社会変革、未来への問いを絡めると尚良い
+- 番号付きリスト（1. 2. 3.）で出力し、投稿文以外の説明は不要
+- 必ず上記フックパターンのいずれかで始める
+- 医療×AI、社会変革、ビジネスリスク・チャンスの視点を絡める
 - ハッシュタグは1〜2個まで
 
 ## 今日の最新AIニュース
@@ -141,8 +162,10 @@ def _generate_original_ai_insight() -> list[str]:
 
 ルール:
 - 各投稿は140文字以内
-- 番号付きリスト（1. 2. 3.）で出力
-- Claude、GPT、医療AI、AIと社会変革などのテーマを優先
+- 番号付きリスト（1. 2. 3.）で出力し、投稿文以外の説明は不要
+- 必ず上記フックパターンのいずれかで始める
+- Claude Sonnet 5・Fable 5・GPT-5.6・AI規制・医療AI・AIコーディング市場の急拡大などのテーマを優先
+- ビジネス層が「シェアしたい」と感じる洞察・問いを入れる
 """
     raw = _call_claude(prompt)
     return _extract_best_tweet(raw)
