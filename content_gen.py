@@ -9,12 +9,14 @@ import feedparser
 import anthropic
 
 RSS_FEEDS = [
-    "https://news.google.com/rss/search?q=AI+人工知能+Claude+OpenAI&hl=ja&gl=JP&ceid=JP:ja",
-    "https://news.google.com/rss/search?q=生成AI+LLM+大規模言語モデル&hl=ja&gl=JP&ceid=JP:ja",
+    "https://news.google.com/rss/search?q=AI+人工知能+Claude+OpenAI+エージェント&hl=ja&gl=JP&ceid=JP:ja",
+    "https://news.google.com/rss/search?q=生成AI+LLM+大規模言語モデル+2026&hl=ja&gl=JP&ceid=JP:ja",
+    "https://news.google.com/rss/search?q=医療AI+ヘルスケアAI+AIエージェント&hl=ja&gl=JP&ceid=JP:ja",
     "https://feeds.feedburner.com/ledge-ai",
 ]
 
-MAX_TWEET_LENGTH = 140
+# X(Twitter)の文字数上限。日本語1文字=1カウント。URLは23文字換算。
+MAX_TWEET_LENGTH = 280
 NUM_CANDIDATES = 3
 
 AUTHOR_PROFILE = """
@@ -27,13 +29,27 @@ AUTHOR_PROFILE = """
 """
 
 TWEET_STRATEGY = """
-## バズるAI投稿の戦略
-1. 「知らなかった」「考えさせられた」と思わせる切り口
-2. 専門的だが難解すぎない言葉選び
-3. 医療・社会変革・未来への問いかけを絡める
-4. 結論より「問い」で終わるとRTされやすい
-5. ハッシュタグは #AI #生成AI のうち1〜2個まで
-6. Noteリンクをつける場合は文末に自然に入れる
+## バズるAI投稿の戦略（ビジネス層・ユーザー獲得最優先）
+
+### 冒頭フック（最初の1文が命）
+- 「AIの戦場が変わった」「〇〇が終わった」など転換点を示す
+- 「知らなかった人は損してる」「これ見た瞬間ゾッとした」感のある驚き
+- 具体的な数字から始める（例：「5% → 40%。たった1年で。」）
+
+### 本文の型
+- 具体的な数値・統計・固有名詞を必ず1つ入れる
+- 反直感的な洞察（「モデルサイズ競争は終わった」等）
+- 医療・社会変革・ビジネスへの実践的含意を絡める
+- 短い文を重ねてリズムを作る（句読点で改行イメージ）
+
+### 末尾パターン（どれかを選ぶ）
+A. 問いかけ：「あなたの会社はどう動く？」→ RTされやすい
+B. 宣言：「これが2026年のスタンダードになる」→ 保存されやすい
+C. 逆張り：「まだ〇〇してる人は置いていかれる」→ 共感×危機感
+
+### ハッシュタグ
+- #AI #生成AI #AIエージェント のうち最大2個
+- ビジネス系は #DX #医療AI も効果的
 """
 
 
@@ -48,13 +64,27 @@ def _call_claude(prompt: str) -> str:
 
 
 def _extract_best_tweet(raw: str) -> list[str]:
-    """番号付きリストから投稿文を抽出し140文字以内に絞る"""
-    lines = [
-        re.sub(r"^\d+[\.\)]\s*", "", l).strip()
+    """番号付きリストまたはブロック形式から投稿文を抽出してMAX_TWEET_LENGTH以内に絞る"""
+    tweets: list[str] = []
+
+    # パターン1: 番号付き（「1.」「1)」「【案1】」「案1:」形式）
+    numbered = [
+        re.sub(r"^\d+[\.\)]\s*|^【案\d+】\s*|^案\d+[:：]\s*", "", l).strip()
         for l in raw.splitlines()
-        if re.match(r"^\d+", l.strip())
+        if re.match(r"^\s*(\d+[\.\)]|【案\d+】|案\d+)", l.strip())
     ]
-    return [t for t in lines if 0 < len(t) <= MAX_TWEET_LENGTH]
+    tweets.extend(t for t in numbered if 0 < len(t) <= MAX_TWEET_LENGTH)
+
+    # パターン2: 「---」区切りブロック形式のフォールバック
+    if not tweets:
+        blocks = re.split(r"-{3,}|\n{2,}", raw)
+        for block in blocks:
+            text = re.sub(r"^(案\d+|【.*?】|投稿\d+)[:：]?\s*", "", block.strip(), flags=re.MULTILINE)
+            text = text.strip()
+            if 10 < len(text) <= MAX_TWEET_LENGTH:
+                tweets.append(text)
+
+    return tweets[:NUM_CANDIDATES]
 
 
 def generate_posts_from_notes(note_text: str, feedback_text: str, note_url: str = "") -> list[str]:
@@ -76,13 +106,17 @@ def generate_posts_from_notes(note_text: str, feedback_text: str, note_url: str 
 {TWEET_STRATEGY}
 
 ルール:
-- 各投稿は140文字以内（URLは23文字換算）
-- 番号付きリスト（1. 2. 3.）で出力
+- 各投稿は280文字以内（URLは23文字換算）
+- 番号付きリスト（1. 2. 3.）で各案を出力
 - ハッシュタグは1〜2個まで
-- AIに関するプロレベルの洞察を、一般読者にも刺さる言葉で{link_instruction}
+- 冒頭の1文で読者を引き込む強いフックを必ず入れること
+- 具体的な数字や企業名を使ってリアリティを出す
+- AIに関するプロレベルの洞察を、ビジネスパーソンにも刺さる言葉で{link_instruction}
 {few_shot_section}
 ## Note記事本文
 {note_text[:4000]}
+
+重要: 出力は「1. [ツイート本文]」の形式で、各案を1行で書いてください。
 """
     raw = _call_claude(prompt)
     return _extract_best_tweet(raw)
@@ -118,13 +152,17 @@ def generate_posts_from_rss() -> list[str]:
 {TWEET_STRATEGY}
 
 ルール:
-- 各投稿は140文字以内
-- 番号付きリスト（1. 2. 3.）で出力
-- 医療×AI、社会変革、未来への問いを絡めると尚良い
+- 各投稿は280文字以内
+- 番号付きリスト（1. 2. 3.）で出力し、各案は1行で書く
+- 冒頭フックで「え、知らなかった」と思わせること
+- 具体的な数字・社名・モデル名を必ず入れる
+- 医療×AI、社会変革、ビジネス実践への問いを絡めると尚良い
 - ハッシュタグは1〜2個まで
 
 ## 今日の最新AIニュース
 {headlines_text}
+
+重要: 出力は「1. [ツイート本文]」の形式で、各案を1行で書いてください。
 """
     raw = _call_claude(prompt)
     return _extract_best_tweet(raw)
@@ -140,9 +178,14 @@ def _generate_original_ai_insight() -> list[str]:
 {TWEET_STRATEGY}
 
 ルール:
-- 各投稿は140文字以内
-- 番号付きリスト（1. 2. 3.）で出力
-- Claude、GPT、医療AI、AIと社会変革などのテーマを優先
+- 各投稿は280文字以内
+- 番号付きリスト（1. 2. 3.）で出力し、各案は1行で書く
+- 冒頭フックで「え、知らなかった」と思わせること
+- 具体的な数字・社名・モデル名を必ず入れる
+- AIエージェント、Claude Sonnet 5、医療AI、AIと社会変革などのテーマを優先
+- 2026年7月時点の最新トレンド（エージェントAIの台頭、コスト競争の終焉）を反映
+
+重要: 出力は「1. [ツイート本文]」の形式で、各案を1行で書いてください。
 """
     raw = _call_claude(prompt)
     return _extract_best_tweet(raw)
