@@ -7,7 +7,7 @@ import sys
 import random
 import requests
 from pathlib import Path
-from datetime import date
+from datetime import date, timedelta
 from content_gen import generate_posts_from_notes, generate_posts_from_rss
 
 LOG_FILE = Path("posted_log.txt")
@@ -16,11 +16,22 @@ FEEDBACK_FILE = Path("data/feedback.txt")
 
 LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push"
 
+# 同じNoteを再利用するまでの最低日数
+NOTE_REUSE_DAYS = 14
 
-def load_posted_log() -> set[str]:
+
+def load_posted_log() -> list[dict]:
+    """ログファイルを読み込み、{filename, date, status} のリストを返す"""
     if not LOG_FILE.exists():
-        return set()
-    return set(LOG_FILE.read_text(encoding="utf-8").splitlines())
+        return []
+    entries = []
+    for line in LOG_FILE.read_text(encoding="utf-8").splitlines():
+        if line.startswith("#") or not line.strip():
+            continue
+        parts = line.split("\t")
+        if len(parts) >= 2:
+            entries.append({"filename": parts[0], "date": parts[1], "status": parts[2] if len(parts) > 2 else ""})
+    return entries
 
 
 def append_to_log(entry: str) -> None:
@@ -28,10 +39,33 @@ def append_to_log(entry: str) -> None:
         f.write(entry + "\n")
 
 
-def get_unposted_notes(posted: set[str]) -> list[Path]:
+def get_available_notes(log_entries: list[dict]) -> list[Path]:
+    """NOTE_REUSE_DAYS日以上使っていないNoteを返す（古いものから優先）"""
     if not NOTES_DIR.exists():
         return []
-    return [p for p in NOTES_DIR.glob("*.md") if p.name not in posted]
+
+    today = date.today()
+    cutoff = today - timedelta(days=NOTE_REUSE_DAYS)
+
+    # 各Noteファイルの最終使用日を集計
+    last_used: dict[str, date] = {}
+    for entry in log_entries:
+        fname = entry["filename"]
+        try:
+            used_date = date.fromisoformat(entry["date"])
+        except ValueError:
+            continue
+        if fname not in last_used or used_date > last_used[fname]:
+            last_used[fname] = used_date
+
+    available = []
+    for p in NOTES_DIR.glob("*.md"):
+        if p.name not in last_used or last_used[p.name] <= cutoff:
+            available.append(p)
+
+    # 最後に使った日が古い順でソート（未使用が先頭）
+    available.sort(key=lambda p: last_used.get(p.name, date.min))
+    return available
 
 
 def send_line_message(token: str, user_id: str, message: str) -> bool:
@@ -57,6 +91,7 @@ def build_line_message(posts: list[str], source: str) -> str:
         lines.append(f"\n【案{i}】\n{post}")
         lines.append("─" * 20)
     lines.append("\n✅ 気に入った案をコピーしてXに投稿してください！")
+    lines.append("💡 ヒント：返信を誘う質問で終わるものが拡散しやすいです")
     return "\n".join(lines)
 
 
@@ -64,12 +99,12 @@ def main() -> None:
     line_token = os.environ["LINE_CHANNEL_ACCESS_TOKEN"]
     line_user_id = os.environ["LINE_USER_ID"]
 
-    posted = load_posted_log()
-    unposted = get_unposted_notes(posted)
+    log_entries = load_posted_log()
+    available_notes = get_available_notes(log_entries)
 
-    # Note記事から生成
-    if unposted:
-        note_file = random.choice(unposted)
+    # Note記事から生成（NOTE_REUSE_DAYS日以上未使用のもの）
+    if available_notes:
+        note_file = available_notes[0]  # 最も古いものを優先
         note_text = note_file.read_text(encoding="utf-8")
         feedback_text = FEEDBACK_FILE.read_text(encoding="utf-8") if FEEDBACK_FILE.exists() else ""
         posts = generate_posts_from_notes(note_text, feedback_text)
