@@ -18,9 +18,18 @@ LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push"
 
 
 def load_posted_log() -> set[str]:
+    """ログからすでに使ったノートファイル名の集合を返す"""
     if not LOG_FILE.exists():
         return set()
-    return set(LOG_FILE.read_text(encoding="utf-8").splitlines())
+    names: set[str] = set()
+    for line in LOG_FILE.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split("\t")
+        if parts:
+            names.add(parts[0].strip())
+    return names
 
 
 def append_to_log(entry: str) -> None:
@@ -67,7 +76,7 @@ def main() -> None:
     posted = load_posted_log()
     unposted = get_unposted_notes(posted)
 
-    # Note記事から生成
+    # Note記事から生成（未投稿ファイルが残っている場合）
     if unposted:
         note_file = random.choice(unposted)
         note_text = note_file.read_text(encoding="utf-8")
@@ -80,7 +89,7 @@ def main() -> None:
                 print(f"[LINE通知完了] Note: {note_file.name}")
                 return
 
-    # RSSニュースから生成
+    # RSSニュースから生成（全Note投稿済みまたはNote生成失敗時）
     posts = generate_posts_from_rss()
     if posts:
         message = build_line_message(posts, "AIニュース")
