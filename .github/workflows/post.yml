@@ -10,7 +10,7 @@ jobs:
   post:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # posted_log.txt をコミットするために必要
+      contents: write # posted_log.txt / data/drafts.txt をコミットするために必要
 
     steps:
       - name: Checkout repository
@@ -31,10 +31,10 @@ jobs:
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
         run: python main.py
 
-      - name: Commit posted_log.txt
+      - name: Commit updated files
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add posted_log.txt
+          git add posted_log.txt data/drafts.txt 2>/dev/null || git add posted_log.txt
           git diff --cached --quiet || git commit -m "chore: update posted_log [skip ci]"
           git push
