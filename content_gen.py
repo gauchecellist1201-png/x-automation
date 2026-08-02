@@ -34,6 +34,10 @@ TWEET_STRATEGY = """
 4. 結論より「問い」で終わるとRTされやすい
 5. ハッシュタグは #AI #生成AI のうち1〜2個まで
 6. Noteリンクをつける場合は文末に自然に入れる
+7. 具体的な数字（例: 61%削減、88兆円）を使うと信頼性と拡散力が上がる
+8. 「日本 vs 海外」「医師 vs AI」など対比構造はRTを促進する
+9. 冒頭の1行で読者を引きつける（体言止め・逆説・衝撃的事実）
+10. ビジネス層が「上司に転送したくなる」情報密度を意識する
 """
 
 
@@ -54,7 +58,17 @@ def _extract_best_tweet(raw: str) -> list[str]:
         for l in raw.splitlines()
         if re.match(r"^\d+", l.strip())
     ]
-    return [t for t in lines if 0 < len(t) <= MAX_TWEET_LENGTH]
+    candidates = [t for t in lines if 0 < len(t) <= MAX_TWEET_LENGTH]
+
+    # 番号付きリストで取れない場合は区切り線（---）で分割して試みる
+    if not candidates:
+        blocks = re.split(r"\n[-—]{3,}\n", raw)
+        for block in blocks:
+            text = block.strip()
+            if 20 < len(text) <= MAX_TWEET_LENGTH:
+                candidates.append(text)
+
+    return candidates
 
 
 def generate_posts_from_notes(note_text: str, feedback_text: str, note_url: str = "") -> list[str]:
