@@ -11,6 +11,7 @@ import anthropic
 RSS_FEEDS = [
     "https://news.google.com/rss/search?q=AI+人工知能+Claude+OpenAI&hl=ja&gl=JP&ceid=JP:ja",
     "https://news.google.com/rss/search?q=生成AI+LLM+大規模言語モデル&hl=ja&gl=JP&ceid=JP:ja",
+    "https://news.google.com/rss/search?q=AI+business+enterprise+2026&hl=ja&gl=JP&ceid=JP:ja",
     "https://feeds.feedburner.com/ledge-ai",
 ]
 
@@ -26,14 +27,27 @@ AUTHOR_PROFILE = """
 - 押しつけがましくなく、静かに鋭い洞察を届ける
 """
 
-TWEET_STRATEGY = """
-## バズるAI投稿の戦略
-1. 「知らなかった」「考えさせられた」と思わせる切り口
-2. 専門的だが難解すぎない言葉選び
-3. 医療・社会変革・未来への問いかけを絡める
-4. 結論より「問い」で終わるとRTされやすい
-5. ハッシュタグは #AI #生成AI のうち1〜2個まで
-6. Noteリンクをつける場合は文末に自然に入れる
+VIRAL_TWEET_STRATEGY = """
+## バズるAIビジネス投稿の戦略（ビジネス層ユーザー獲得重視）
+
+### 構造パターン（どれか1つを選ぶ）
+A) 【数字フック型】「〇〇が△△%増加」→ 驚きの事実 → ビジネス示唆
+B) 【逆説型】「〇〇は間違い」「実は△△」→ 意外な真実 → 洞察
+C) 【問い型】深い問いを投げかけ → 短い考察 → 読者に考えさせる
+D) 【未来予測型】「2026年、〇〇が変わる」→ 具体例 → 行動示唆
+E) 【格言型】鋭い一文 → 根拠 → 問い
+
+### バズ要素チェックリスト
+- 冒頭3文字でスクロールを止める（数字・カギカッコ・感嘆符など）
+- ビジネス層が「これは知らなかった」と感じる情報格差
+- 医療×AI、社会変革、意思決定の変化テーマ
+- 読んだ人が「引用RTしたくなる」洞察
+- ハッシュタグは #AI #生成AI のうち1個のみ（スペース節約）
+
+### 避けるもの
+- 「〇〇がすごい」という単純な称賛
+- ポジティブすぎる未来予測
+- 専門用語の羅列
 """
 
 
@@ -47,7 +61,7 @@ def _call_claude(prompt: str) -> str:
     return message.content[0].text
 
 
-def _extract_best_tweet(raw: str) -> list[str]:
+def _extract_tweets(raw: str) -> list[str]:
     """番号付きリストから投稿文を抽出し140文字以内に絞る"""
     lines = [
         re.sub(r"^\d+[\.\)]\s*", "", l).strip()
@@ -55,6 +69,27 @@ def _extract_best_tweet(raw: str) -> list[str]:
         if re.match(r"^\d+", l.strip())
     ]
     return [t for t in lines if 0 < len(t) <= MAX_TWEET_LENGTH]
+
+
+def _select_best_tweet(tweets: list[str]) -> str | None:
+    """Claude に最もバズりそうな投稿を1本選ばせる"""
+    if not tweets:
+        return None
+    if len(tweets) == 1:
+        return tweets[0]
+
+    numbered = "\n".join(f"{i+1}. {t}" for i, t in enumerate(tweets))
+    prompt = f"""以下のX投稿候補から、ビジネス層への拡散力が最も高い1つを選んでください。
+選んだ番号のみ（数字1文字）を返してください。
+
+{numbered}"""
+    raw = _call_claude(prompt).strip()
+    match = re.search(r"\d", raw)
+    if match:
+        idx = int(match.group()) - 1
+        if 0 <= idx < len(tweets):
+            return tweets[idx]
+    return tweets[0]
 
 
 def generate_posts_from_notes(note_text: str, feedback_text: str, note_url: str = "") -> list[str]:
@@ -73,22 +108,22 @@ def generate_posts_from_notes(note_text: str, feedback_text: str, note_url: str 
 以下のNote記事を読み、Xに投稿する文章を{NUM_CANDIDATES}案作成してください。
 
 {AUTHOR_PROFILE}
-{TWEET_STRATEGY}
+{VIRAL_TWEET_STRATEGY}
 
 ルール:
 - 各投稿は140文字以内（URLは23文字換算）
 - 番号付きリスト（1. 2. 3.）で出力
-- ハッシュタグは1〜2個まで
-- AIに関するプロレベルの洞察を、一般読者にも刺さる言葉で{link_instruction}
+- ハッシュタグは1個まで
+- ビジネス層が思わず保存・RTしたくなる洞察{link_instruction}
 {few_shot_section}
 ## Note記事本文
 {note_text[:4000]}
 """
     raw = _call_claude(prompt)
-    return _extract_best_tweet(raw)
+    return _extract_tweets(raw)
 
 
-def fetch_rss_headlines(max_items: int = 8) -> list[str]:
+def fetch_rss_headlines(max_items: int = 10) -> list[str]:
     headlines: list[str] = []
     for url in RSS_FEEDS:
         try:
@@ -112,37 +147,43 @@ def generate_posts_from_rss() -> list[str]:
 
     prompt = f"""あなたはXアカウント @GAUCHE_cellist（井出直毅）の投稿担当AIです。
 以下の最新AIニュースから最も注目すべきトピックを1つ選び、
-井出直毅らしい洞察・意見をX投稿として{NUM_CANDIDATES}案作成してください。
+ビジネス層に刺さる洞察・意見をX投稿として{NUM_CANDIDATES}案作成してください。
 
 {AUTHOR_PROFILE}
-{TWEET_STRATEGY}
+{VIRAL_TWEET_STRATEGY}
 
 ルール:
 - 各投稿は140文字以内
 - 番号付きリスト（1. 2. 3.）で出力
-- 医療×AI、社会変革、未来への問いを絡めると尚良い
-- ハッシュタグは1〜2個まで
+- ビジネス経営者・投資家・医療関係者が「保存したくなる」内容
+- ハッシュタグは1個まで
 
 ## 今日の最新AIニュース
 {headlines_text}
 """
     raw = _call_claude(prompt)
-    return _extract_best_tweet(raw)
+    return _extract_tweets(raw)
 
 
 def _generate_original_ai_insight() -> list[str]:
     """RSSが取得できない場合のオリジナル洞察ツイート生成"""
     prompt = f"""あなたはXアカウント @GAUCHE_cellist（井出直毅）の投稿担当AIです。
 2026年のAI業界で最も重要なトピックについて、
-井出直毅らしい深い洞察を持つX投稿を{NUM_CANDIDATES}案作成してください。
+ビジネス層が思わず保存・RTしたくなるX投稿を{NUM_CANDIDATES}案作成してください。
 
 {AUTHOR_PROFILE}
-{TWEET_STRATEGY}
+{VIRAL_TWEET_STRATEGY}
 
 ルール:
 - 各投稿は140文字以内
 - 番号付きリスト（1. 2. 3.）で出力
-- Claude、GPT、医療AI、AIと社会変革などのテーマを優先
+- 自律型AIエージェント、医療AI、AIと雇用、企業のAI内製化などを優先テーマに
+- ハッシュタグは1個まで
 """
     raw = _call_claude(prompt)
-    return _extract_best_tweet(raw)
+    return _extract_tweets(raw)
+
+
+def pick_best_post(posts: list[str]) -> str | None:
+    """候補投稿の中からバズ期待度が最高の1本を返す"""
+    return _select_best_tweet(posts)
