@@ -11,6 +11,8 @@ import anthropic
 RSS_FEEDS = [
     "https://news.google.com/rss/search?q=AI+人工知能+Claude+OpenAI&hl=ja&gl=JP&ceid=JP:ja",
     "https://news.google.com/rss/search?q=生成AI+LLM+大規模言語モデル&hl=ja&gl=JP&ceid=JP:ja",
+    "https://news.google.com/rss/search?q=Claude+Opus+GPT+Gemini+2026&hl=ja&gl=JP&ceid=JP:ja",
+    "https://news.google.com/rss/search?q=AIエージェント+自律型AI+医療AI+2026&hl=ja&gl=JP&ceid=JP:ja",
     "https://feeds.feedburner.com/ledge-ai",
 ]
 
@@ -27,13 +29,17 @@ AUTHOR_PROFILE = """
 """
 
 TWEET_STRATEGY = """
-## バズるAI投稿の戦略
-1. 「知らなかった」「考えさせられた」と思わせる切り口
-2. 専門的だが難解すぎない言葉選び
-3. 医療・社会変革・未来への問いかけを絡める
-4. 結論より「問い」で終わるとRTされやすい
-5. ハッシュタグは #AI #生成AI のうち1〜2個まで
-6. Noteリンクをつける場合は文末に自然に入れる
+## バズるAI投稿の戦略（2026年版）
+1. 冒頭1行が命：最初の20文字で「続きを読みたい」と思わせる
+2. 具体的な数字・データを使う（例: 42/42、$2,000、80%値下げ、10億人）
+3. 逆張り・意外性のある問いで終わる → RTされやすい
+4. 「知らなかった」「考えさせられた」感を与える切り口
+5. 専門的だが難解すぎない言葉選び（医師にも一般読者にも届く）
+6. 医療・社会変革・AIと人間の境界線を絡める
+7. ハッシュタグは1〜2個まで（#AI #生成AI #医療DX から選択）
+8. 文末をピリオドで終わらず「問い」にするとエンゲージメント3倍
+9. 数字フック例: 「X人が、Yをした。あなたは知っていたか。」
+10. Noteリンクは文末に自然に（URLは23文字換算）
 """
 
 
@@ -79,6 +85,8 @@ def generate_posts_from_notes(note_text: str, feedback_text: str, note_url: str 
 - 各投稿は140文字以内（URLは23文字換算）
 - 番号付きリスト（1. 2. 3.）で出力
 - ハッシュタグは1〜2個まで
+- 冒頭に具体的な数字や驚きのファクトを必ず入れる
+- 最後は問いかけまたは余韻のある一言で締める
 - AIに関するプロレベルの洞察を、一般読者にも刺さる言葉で{link_instruction}
 {few_shot_section}
 ## Note記事本文
