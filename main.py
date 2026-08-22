@@ -20,7 +20,12 @@ LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push"
 def load_posted_log() -> set[str]:
     if not LOG_FILE.exists():
         return set()
-    return set(LOG_FILE.read_text(encoding="utf-8").splitlines())
+    filenames: set[str] = set()
+    for line in LOG_FILE.read_text(encoding="utf-8").splitlines():
+        if not line.strip() or line.startswith("#"):
+            continue
+        filenames.add(line.split("\t")[0])
+    return filenames
 
 
 def append_to_log(entry: str) -> None:
