@@ -11,7 +11,8 @@ import anthropic
 RSS_FEEDS = [
     "https://news.google.com/rss/search?q=AI+人工知能+Claude+OpenAI&hl=ja&gl=JP&ceid=JP:ja",
     "https://news.google.com/rss/search?q=生成AI+LLM+大規模言語モデル&hl=ja&gl=JP&ceid=JP:ja",
-    "https://feeds.feedburner.com/ledge-ai",
+    "https://news.google.com/rss/search?q=AIエージェント+医療AI+ビジネスAI&hl=ja&gl=JP&ceid=JP:ja",
+    "https://news.google.com/rss/search?q=AI+規制+EU+AI法+日本&hl=ja&gl=JP&ceid=JP:ja",
 ]
 
 MAX_TWEET_LENGTH = 140
@@ -21,19 +22,36 @@ AUTHOR_PROFILE = """
 ## 著者プロフィール：井出直毅 (@GAUCHE_cellist)
 - 医学生 × AI/ブロックチェーン起業家
 - 医療×テクノロジーの融合を追求
-- 課題解決志向、グローバル視点
+- スイス留学・国連会議参加のグローバル視点
 - 専門的知識を持ちながら、読者に考えさせる問いを投げかけるスタイル
 - 押しつけがましくなく、静かに鋭い洞察を届ける
+- フォロワー：ビジネスパーソン、医療従事者、AI起業家
+"""
+
+VIRAL_PATTERNS = """
+## バズる投稿パターン（必ずいずれかを使う）
+A. 「数字＋驚き」型：具体的な数字で読者の常識を揺さぶる
+   例）「AIエージェントへの投資が7月だけで1.8兆円。1年前の10倍だ。」
+B. 「逆張り洞察」型：みんなが見ている方向と逆を鋭く突く
+   例）「AIの最大の壁は技術ではなく、ガバナンスだ。」
+C. 「問い」型：答えを出さず、読者に考えさせる
+   例）「医師の代わりにAIが診断する時代、責任は誰が取るのか。」
+D. 「今起きている変化」型：リアルタイム感でRTを誘う
+   例）「EU AI法が今月施行。AIとのやりとりで開示義務が生まれた。日本企業も無関係ではない。」
+E. 「二項対立」型：AかBかで思考を二分割して反応を引き出す
+   例）「AIは医師の敵か、それとも最強の相棒か。」
 """
 
 TWEET_STRATEGY = """
 ## バズるAI投稿の戦略
-1. 「知らなかった」「考えさせられた」と思わせる切り口
-2. 専門的だが難解すぎない言葉選び
-3. 医療・社会変革・未来への問いかけを絡める
-4. 結論より「問い」で終わるとRTされやすい
-5. ハッシュタグは #AI #生成AI のうち1〜2個まで
+1. 上記パターンA〜Eのいずれかを必ず使う
+2. 「知らなかった」「考えさせられた」と思わせる切り口
+3. 医療・ビジネス変革・規制・未来への問いかけを絡める
+4. 文末を「問い」か「余韻のある一文」で締めるとRTされやすい
+5. ハッシュタグは #AI #生成AI #医療AI のうち1個まで（必須ではない）
 6. Noteリンクをつける場合は文末に自然に入れる
+7. 絵文字は使わない（知性的な印象を保つ）
+8. 「ですます」調より「だ・である」調が刺さりやすい
 """
 
 
@@ -73,13 +91,15 @@ def generate_posts_from_notes(note_text: str, feedback_text: str, note_url: str 
 以下のNote記事を読み、Xに投稿する文章を{NUM_CANDIDATES}案作成してください。
 
 {AUTHOR_PROFILE}
+{VIRAL_PATTERNS}
 {TWEET_STRATEGY}
 
 ルール:
 - 各投稿は140文字以内（URLは23文字換算）
 - 番号付きリスト（1. 2. 3.）で出力
-- ハッシュタグは1〜2個まで
-- AIに関するプロレベルの洞察を、一般読者にも刺さる言葉で{link_instruction}
+- ハッシュタグは1個まで（なくてもよい）
+- AIに関するプロレベルの洞察を、ビジネス層・医療従事者にも刺さる言葉で{link_instruction}
+- 3案それぞれ異なるパターン（A〜E）を使うこと
 {few_shot_section}
 ## Note記事本文
 {note_text[:4000]}
@@ -115,13 +135,15 @@ def generate_posts_from_rss() -> list[str]:
 井出直毅らしい洞察・意見をX投稿として{NUM_CANDIDATES}案作成してください。
 
 {AUTHOR_PROFILE}
+{VIRAL_PATTERNS}
 {TWEET_STRATEGY}
 
 ルール:
 - 各投稿は140文字以内
 - 番号付きリスト（1. 2. 3.）で出力
-- 医療×AI、社会変革、未来への問いを絡めると尚良い
-- ハッシュタグは1〜2個まで
+- 医療×AI、ビジネス変革、規制・未来への問いを絡めると尚良い
+- ハッシュタグは1個まで（なくてもよい）
+- 3案それぞれ異なるパターン（A〜E）を使うこと
 
 ## 今日の最新AIニュース
 {headlines_text}
@@ -137,12 +159,15 @@ def _generate_original_ai_insight() -> list[str]:
 井出直毅らしい深い洞察を持つX投稿を{NUM_CANDIDATES}案作成してください。
 
 {AUTHOR_PROFILE}
+{VIRAL_PATTERNS}
 {TWEET_STRATEGY}
 
 ルール:
 - 各投稿は140文字以内
 - 番号付きリスト（1. 2. 3.）で出力
-- Claude、GPT、医療AI、AIと社会変革などのテーマを優先
+- AIエージェント、医療AI、EU AI法規制、ビジネス変革などのテーマを優先
+- 3案それぞれ異なるパターン（A〜E）を使うこと
+- ビジネス層・医療従事者に届く言葉で書く
 """
     raw = _call_claude(prompt)
     return _extract_best_tweet(raw)
