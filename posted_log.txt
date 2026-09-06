@@ -46,3 +46,4 @@ sample.md	2026-06-04	line_notified
 sample.md	2026-06-05	line_notified
 sample.md	2026-06-06	line_notified
 sample.md	2026-06-07	line_notified
+2026-09-06-ai-news.md	2026-09-06	line_notified
