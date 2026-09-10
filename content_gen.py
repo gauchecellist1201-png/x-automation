@@ -11,6 +11,7 @@ import anthropic
 RSS_FEEDS = [
     "https://news.google.com/rss/search?q=AI+人工知能+Claude+OpenAI&hl=ja&gl=JP&ceid=JP:ja",
     "https://news.google.com/rss/search?q=生成AI+LLM+大規模言語モデル&hl=ja&gl=JP&ceid=JP:ja",
+    "https://news.google.com/rss/search?q=AIエージェント+医療AI+ビジネスAI&hl=ja&gl=JP&ceid=JP:ja",
     "https://feeds.feedburner.com/ledge-ai",
 ]
 
@@ -27,13 +28,29 @@ AUTHOR_PROFILE = """
 """
 
 TWEET_STRATEGY = """
-## バズるAI投稿の戦略
-1. 「知らなかった」「考えさせられた」と思わせる切り口
-2. 専門的だが難解すぎない言葉選び
-3. 医療・社会変革・未来への問いかけを絡める
-4. 結論より「問い」で終わるとRTされやすい
-5. ハッシュタグは #AI #生成AI のうち1〜2個まで
-6. Noteリンクをつける場合は文末に自然に入れる
+## バズるAI投稿の戦略（ビジネス層向けユーザー獲得最優先）
+
+### 拡散しやすいフォーマット（優先順）
+1. 「数字で驚かす」型：「〇〇が△△%削減」「〇〇社が〇〇円投資」などの具体的数値
+2. 「逆説・意外性」型：「AIに仕事を奪われる？実は〇〇の仕事が増えている」
+3. 「問いかけ」型：結論を言わずに読者に考えさせる。RTされやすい
+4. 「専門家視点の告白」型：「医学生として言う。AIの〇〇は使えない。でも〇〇は本物だ」
+5. 「未来予測」型：「2027年、〇〇は消える。その理由は」
+6. 「Before/After」型：「AIを導入する前→後」の対比で価値を可視化
+
+### 言葉選びのルール
+- 専門用語は1投稿に1個まで、必ず一言で定義する
+- ビジネス層が「これうちの会社に使える」と思う具体性
+- 医療×AI×社会変革を絡めると井出直毅らしさが出る
+- 「〇〇の本質は△△」「実は〇〇」「誰も言わないが〇〇」で始めると開封率アップ
+
+### ハッシュタグ
+- #AI #生成AI #AIエージェント #医療AI のうち1〜2個のみ
+- 文末に自然に配置
+
+### リンク・メディア活用
+- Note記事URLを貼る場合は文末に「→ （URL）」形式で
+- 統計や図表を引用する場合は出典を明記
 """
 
 
@@ -54,7 +71,24 @@ def _extract_best_tweet(raw: str) -> list[str]:
         for l in raw.splitlines()
         if re.match(r"^\d+", l.strip())
     ]
-    return [t for t in lines if 0 < len(t) <= MAX_TWEET_LENGTH]
+    # 140文字超でも160文字以内ならURLを考慮して許容
+    return [t for t in lines if 0 < len(t) <= 160]
+
+
+def generate_viral_analysis(note_text: str) -> str:
+    """記事からバズ要素を分析し、画像・リンク活用案を返す"""
+    prompt = f"""以下のAI記事から、X（Twitter）でバズるための戦略を分析してください。
+
+## 分析して欲しい内容（箇条書きで簡潔に）
+1. 最も拡散しそうな「数字・統計・事実」を3つ抽出
+2. 推奨する投稿フォーマット（問いかけ型/数値型/逆説型）
+3. 添付すると効果的な画像・図表のアイデア（生成AIで作れるものを提案）
+4. 関連リンク候補（引用すべき公式発表・論文・ニュースURL）
+
+## 記事
+{note_text[:3000]}
+"""
+    return _call_claude(prompt)
 
 
 def generate_posts_from_notes(note_text: str, feedback_text: str, note_url: str = "") -> list[str]:
