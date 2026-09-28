@@ -4,9 +4,6 @@ on:
   schedule:
     - cron: '7 23 * * *'   # around 08:07 JST daily
     - cron: '22 23 * * 0' # around Monday 08:22 JST weekly
-  push:
-    branches: [main]
-    paths: ['.github/workflows/social.yml']
   workflow_dispatch:
     inputs:
       kind:
